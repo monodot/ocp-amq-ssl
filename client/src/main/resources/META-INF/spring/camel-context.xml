@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:camel="http://camel.apache.org/schema/spring"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xsi:schemaLocation="
+       http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+       http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd
+       http://camel.apache.org/schema/spring http://camel.apache.org/schema/spring/camel-spring.xsd">
+
+  <camelContext xmlns="http://camel.apache.org/schema/spring">
+
+    <route id="producer-route">
+      <from uri="timer:foo?period=5000"/>
+      <!-- generate random number message, using a 3 digit number -->
+      <setBody>
+        <constant>Everything is awesome!</constant>
+      </setBody>
+      <to uri="amq:queue:TEST.FOO"/>
+    </route>
+
+    <route id="consumer-route">
+      <from uri="amq:queue:TEST.FOO"/>
+      <to uri="log:output"/>
+    </route>
+
+  </camelContext>
+
+  <context:property-placeholder location="classpath:application.properties"
+                                ignore-resource-not-found="true"/>
+
+<!--
+  <bean id="jmsConnectionFactory" class="org.apache.activemq.ActiveMQConnectionFactory">
+    <property name="brokerURL" value="${env.ACTIVEMQ_BROKER_URL:${activemq.broker.url}}"/>
+    <property name="userName" value="${env.ACTIVEMQ_BROKER_USERNAME:${activemq.broker.username:#{null}}}"/>
+    <property name="password" value="${env.ACTIVEMQ_BROKER_PASSWORD:${activemq.broker.password:#{null}}}"/>
+  </bean>
+-->
+
+  <bean id="jmsConnectionFactory" class="org.apache.activemq.ActiveMQSslConnectionFactory">
+    <property name="brokerURL" value="${env.ACTIVEMQ_BROKER_URL:${activemq.broker.url}}"/>
+    <property name="userName" value="${env.ACTIVEMQ_BROKER_USERNAME:${activemq.broker.username:#{null}}}"/>
+    <property name="password" value="${env.ACTIVEMQ_BROKER_PASSWORD:${activemq.broker.password:#{null}}}"/>
+    <property name="trustStore" value="${env.TRUSTSTORE_PATH:${truststore.path:#{/etc/amq-client-secret/client.ts}}}"/>
+    <property name="trustStorePassword" value="${env.TRUSTSTORE_PASSWORD:${truststore.password:#{changeit}}}"/>
+    <property name="keyStore" value="${env.KEYSTORE_PATH:${keystore.path:#{/etc/amq-client-secret/client.ks}}}"/>
+    <property name="keyStorePassword" value="${env.KEYSTORE_PASSWORD:${keystore.password:#{changeit}}}"/>
+  </bean>
+
+  <bean primary="true" id="pooledConnectionFactory" class="org.apache.activemq.pool.PooledConnectionFactory" init-method="start" destroy-method="stop">
+    <property name="maxConnections" value="${activemq.pool.max.connections}"/>
+    <property name="connectionFactory" ref="jmsConnectionFactory"/>
+  </bean>
+
+  <bean id="jmsConfig" class="org.apache.activemq.camel.component.ActiveMQConfiguration">
+    <property name="connectionFactory" ref="pooledConnectionFactory"/>
+    <property name="concurrentConsumers" value="${activemq.concurrent.consumers}"/>
+  </bean>
+
+  <bean id="amq" class="org.apache.activemq.camel.component.ActiveMQComponent">
+    <property name="configuration" ref="jmsConfig"/>
+  </bean>
+
+
+
+</beans>

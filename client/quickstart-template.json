@@ -1,0 +1,376 @@
+{
+  "apiVersion": "v1",
+  "kind": "Template",
+  "labels": {},
+  "metadata": {
+    "annotations": {
+      "description": "Example Camel route which uses a timer to send a message to ActiveMQ every 5 seconds, then consume the same message and log it. Based on the Java Camel Spring QuickStart.\n\nRequires a secret, `my-secret` which contains a Java truststore.",
+      "iconClass": "icon-java"
+    },
+    "labels": {},
+    "name": "spring-camel-amq"
+  },
+  "parameters": [
+    {
+      "name": "APP_NAME",
+      "value": "spring-camel-amq",
+      "description": "Application Name"
+    },
+    {
+      "name": "GIT_REPO",
+      "value": "https://github.com/monodot/xpaas-demos",
+      "required": true,
+      "description": "Git repository, required"
+    },
+    {
+      "name": "CONTEXT_DIR",
+      "value": "spring-camel-amq",
+      "required": false,
+      "description": "Context directory where the application is located"
+    },
+    {
+      "name": "GIT_REF",
+      "value": "master",
+      "description": "Git ref to build"
+    },
+    {
+      "name": "SERVICE_NAME",
+      "value": "spring-camel-amq",
+      "description": "Exposed Service name"
+    },
+    {
+      "name": "BUILDER_VERSION",
+      "value": "1.0",
+      "description": "Builder version"
+    },
+    {
+      "name": "APP_VERSION",
+      "value": "2.2.0.redhat-079",
+      "description": "Application version"
+    },
+    {
+      "name": "MAVEN_ARGS",
+      "value": "package -DskipTests -e",
+      "description": "Arguments passed to mvn in the build"
+    },
+    {
+      "name": "MAVEN_ARGS_APPEND",
+      "description": "Extra arguments passed to mvn, e.g. for multi-module builds"
+    },
+    {
+      "name": "MAVEN_MIRROR_URL",
+      "description": "URL to a local Maven mirror for pulling artifacts",
+      "value": "http://192.168.1.102:8081/nexus/content/groups/public/"
+    },
+    {
+      "name": "JAVA_OPTIONS",
+      "description": "Runtime options passed to the JVM. Truststore settings should be specified here.",
+      "value": "-Djavax.net.ssl.trustStore=/etc/secret-volume/client.ts -Djavax.net.ssl.trustStorePassword=changeit"
+    },
+    {
+      "name": "ARTIFACT_DIR",
+      "description": "Maven build directory"
+    },
+    {
+      "description": "Namespace in which the Fuse ImageStreams are installed. These ImageStreams are normally installed in the openshift namespace. You should only need to modify this if you've installed the ImageStreams in a different namespace/project.",
+      "name": "IMAGE_STREAM_NAMESPACE",
+      "value": "openshift",
+      "required": true
+    },
+    {
+      "generate": "expression",
+      "name": "BUILD_SECRET",
+      "description": "The secret needed to trigger a build",
+      "from": "[a-zA-Z0-9]{8}"
+    },
+    {
+      "description": "ActiveMQ URL",
+      "name": "ACTIVEMQ_BROKER_URL",
+      "value": "failover://ssl://broker-amq-tcp-ssl.demo.svc.cluster.local:61617",
+      "required": true
+    },
+    {
+      "description": "ActiveMQ username",
+      "name": "ACTIVEMQ_BROKER_USERNAME",
+      "value": "username",
+      "required": true
+    },
+    {
+      "description": "ActiveMQ password",
+      "name": "ACTIVEMQ_BROKER_PASSWORD",
+      "value": "password",
+      "required": true
+    }
+  ],
+  "objects": [
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "annotations": {
+          "prometheus.io/port": "9779",
+          "prometheus.io/scrape": "true"
+        },
+        "labels": {
+          "container": "java",
+          "component": "${APP_NAME}",
+          "provider": "s2i",
+          "project": "${APP_NAME}",
+          "version": "${APP_VERSION}",
+          "group": "xpaas-demos"
+        },
+        "name": "${SERVICE_NAME}"
+      },
+      "spec": {
+        "clusterIP": "None",
+        "deprecatedPublicIPs": [],
+        "ports": [
+          {
+            "port": 1
+          }
+        ],
+        "selector": {
+          "container": "java",
+          "project": "${APP_NAME}",
+          "component": "${APP_NAME}",
+          "provider": "s2i",
+          "group": "xpaas-demos"
+        }
+      }
+    },
+    {
+      "kind": "ImageStream",
+      "apiVersion": "v1",
+      "metadata": {
+        "name": "${APP_NAME}",
+        "creationTimestamp": null,
+        "labels": {
+          "component": "${APP_NAME}",
+          "container": "java",
+          "group": "xpaas-demos",
+          "project": "${APP_NAME}",
+          "provider": "s2i",
+          "version": "${APP_VERSION}"
+        }
+      },
+      "spec": {},
+      "status": {
+        "dockerImageRepository": ""
+      }
+    },
+    {
+      "kind": "BuildConfig",
+      "apiVersion": "v1",
+      "metadata": {
+        "name": "${APP_NAME}",
+        "creationTimestamp": null,
+        "labels": {
+          "component": "${APP_NAME}",
+          "container": "java",
+          "group": "xpaas-demos",
+          "project": "${APP_NAME}",
+          "provider": "s2i",
+          "version": "${APP_VERSION}"
+        }
+      },
+      "spec": {
+        "triggers": [
+          {
+            "type": "GitHub",
+            "github": {
+              "secret": "${BUILD_SECRET}"
+            }
+          },
+          {
+            "type": "Generic",
+            "generic": {
+              "secret": "${BUILD_SECRET}"
+            }
+          },
+          {
+            "type": "ConfigChange"
+          },
+          {
+            "type": "ImageChange",
+            "imageChange": {}
+          }
+        ],
+        "source": {
+          "type": "Git",
+          "git": {
+            "uri": "${GIT_REPO}",
+            "ref": "${GIT_REF}"
+          },
+          "contextDir": "${CONTEXT_DIR}"
+        },
+        "strategy": {
+          "type": "Source",
+          "sourceStrategy": {
+            "from": {
+              "kind": "ImageStreamTag",
+              "namespace": "${IMAGE_STREAM_NAMESPACE}",
+              "name": "fis-java-openshift:${BUILDER_VERSION}"
+            },
+            "forcePull": true,
+            "env": [
+              {
+                "name": "BUILD_LOGLEVEL",
+                "value": "5"
+              },
+              {
+                "name": "ARTIFACT_DIR",
+                "value": "${ARTIFACT_DIR}"
+              },
+              {
+                "name": "MAVEN_ARGS",
+                "value": "${MAVEN_ARGS}"
+              },
+              {
+                "name": "MAVEN_ARGS_APPEND",
+                "value": "${MAVEN_ARGS_APPEND}"
+              },
+              {
+                "name": "MAVEN_MIRROR_URL",
+                "value": "${MAVEN_MIRROR_URL}"
+              }
+            ]
+          }
+        },
+        "output": {
+          "to": {
+            "kind": "ImageStreamTag",
+            "name": "${APP_NAME}:latest"
+          }
+        },
+        "resources": {}
+      },
+      "status": {
+        "lastVersion": 0
+      }
+    },
+    {
+      "kind": "DeploymentConfig",
+      "apiVersion": "v1",
+      "metadata": {
+        "name": "${APP_NAME}",
+        "creationTimestamp": null,
+        "labels": {
+          "component": "${APP_NAME}",
+          "container": "java",
+          "group": "xpaas-demos",
+          "project": "${APP_NAME}",
+          "provider": "s2i",
+          "version": "${APP_VERSION}"
+        }
+      },
+      "spec": {
+        "strategy": {
+          "resources": {}
+        },
+        "triggers": [
+          {
+            "type": "ConfigChange"
+          },
+          {
+            "type": "ImageChange",
+            "imageChangeParams": {
+              "automatic": true,
+              "containerNames": [
+                "${APP_NAME}"
+              ],
+              "from": {
+                "kind": "ImageStreamTag",
+                "name": "${APP_NAME}:latest"
+              }
+            }
+          }
+        ],
+        "replicas": 1,
+        "selector": {
+          "component": "${APP_NAME}",
+          "container": "java",
+          "deploymentconfig": "${APP_NAME}",
+          "group": "xpaas-demos",
+          "project": "${APP_NAME}",
+          "provider": "s2i",
+          "version": "${APP_VERSION}"
+        },
+        "template": {
+          "metadata": {
+            "creationTimestamp": null,
+            "labels": {
+              "component": "${APP_NAME}",
+              "container": "java",
+              "deploymentconfig": "${APP_NAME}",
+              "group": "xpaas-demos",
+              "project": "${APP_NAME}",
+              "provider": "s2i",
+              "version": "${APP_VERSION}"
+            }
+          },
+          "spec": {
+            "containers": [
+              {
+                "env": [
+                  {
+                    "name": "ACTIVEMQ_BROKER_URL",
+                    "value": "${ACTIVEMQ_BROKER_URL}"
+                  },
+                  {
+                    "name": "ACTIVEMQ_BROKER_USERNAME",
+                    "value": "${ACTIVEMQ_BROKER_USERNAME}"
+                  },
+                  {
+                    "name": "ACTIVEMQ_BROKER_PASSWORD",
+                    "value": "${ACTIVEMQ_BROKER_PASSWORD}"
+                  },
+                  {
+                    "name": "JAVA_OPTIONS",
+                    "value": "${JAVA_OPTIONS}"
+                  }
+                ],
+                "name": "${APP_NAME}",
+                "image": "library/${APP_NAME}:latest",
+                "volumeMounts": [
+                  {
+                    "name": "secret-volume",
+                    "mountPath": "/etc/secret-volume",
+                    "readOnly": true
+                  }
+                ],
+                "readinessProbe": {
+                  "exec": {
+                    "command": [
+                      "/bin/bash",
+                      "-c",
+                      "(curl -f 127.0.0.1:8778) >/dev/null 2>&1; test $? != 7"
+                    ]
+                  },
+                  "initialDelaySeconds": 30,
+                  "timeoutSeconds": 5
+                },
+                "ports": [
+                  {
+                    "containerPort": 8778,
+                    "name": "jolokia",
+                    "protocol": "TCP"
+                  }
+                ],
+                "resources": {}
+              }
+            ],
+            "volumes": [
+              {
+                "name": "secret-volume",
+                "secret": {
+                  "secretName": "my-secret"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "status": {}
+    }
+  ]
+}

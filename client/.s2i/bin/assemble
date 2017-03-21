@@ -1,0 +1,23 @@
+#!/bin/sh
+
+# Read in the S2I_SOURCE_DIR variable and friends
+source /usr/local/s2i/s2i-setup
+
+# insert settings for mirrors/repository managers into settings.xml if supplied
+function configure_mirrors() {
+  if [ -n "$MAVEN_MIRROR_URL" ]; then
+    xml="    <mirror>\
+      <id>mirror.default</id>\
+      <url>$MAVEN_MIRROR_URL</url>\
+      <mirrorOf>external:*</mirrorOf>\
+    </mirror>"
+
+    echo "Adding $MAVEN_MIRROR_URL as a Maven mirror to ${S2I_SOURCE_DIR}/configuration/settings.xml......."
+    sed -i "s|<!-- ### configured mirrors ### -->|$xml|" ${S2I_SOURCE_DIR}/configuration/settings.xml
+  fi
+}
+
+
+configure_mirrors
+
+exec /usr/local/s2i/assemble
